@@ -38,7 +38,7 @@ bash_patches() {
       break
     fi
   done
-  for i in $DIR/bash_patches/*; do
+  for i in $SCRIPT_DIR/bash_patches/*; do
     local PFILE=$(basename $i)
     cp -f $i $PFILE
     sed -i "s/4.4/$VER/g" $PFILE
@@ -122,6 +122,7 @@ TEXTRESET=$(tput sgr0)
 TEXTGREEN=$(tput setaf 2)
 TEXTRED=$(tput setaf 1)
 DIR=$PWD
+SCRIPT_DIR=$(dirname "$(readlink -f "$BASH_SOURCE")")
 NDKVER=r20b
 STATIC=false
 SEP=false
@@ -154,9 +155,9 @@ fi
 
 # Set up Android NDK
 echogreen "Fetching Android NDK $NDKVER"
-[ -f "android-ndk-$NDKVER-linux-x86_64.zip" ] || wget https://dl.google.com/android/repository/android-ndk-$NDKVER-linux-x86_64.zip
-[ -d "android-ndk-$NDKVER" ] || unzip -qo android-ndk-$NDKVER-linux-x86_64.zip
-export ANDROID_NDK_HOME=$DIR/android-ndk-$NDKVER
+#[ -f "android-ndk-$NDKVER-linux-x86_64.zip" ] || wget https://dl.google.com/android/repository/android-ndk-$NDKVER-linux-x86_64.zip
+#[ -d "android-ndk-$NDKVER" ] || unzip -qo android-ndk-$NDKVER-linux-x86_64.zip
+export ANDROID_NDK_HOME="/media/android/FrankeNDK"
 export ANDROID_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 
 for LBIN in $BIN; do
@@ -242,7 +243,7 @@ for LBIN in $BIN; do
     if $STATIC; then
       CFLAGS='-static -O2'
       LDFLAGS='-static'
-      $NDK && [ -f $DIR/ndk_static_patches/$LBIN.patch ] && patch_file $DIR/ndk_static_patches/$LBIN.patch
+      $NDK && [ -f $SCRIPT_DIR/ndk_static_patches/$LBIN.patch ] && patch_file $SCRIPT_DIR/ndk_static_patches/$LBIN.patch
       export PREFIX=$DIR/build-static/$LBIN/$LARCH
     else
       CFLAGS='-O2 -fPIE -fPIC'
@@ -274,11 +275,12 @@ for LBIN in $BIN; do
         ./configure $FLAGS--prefix=$PREFIX --disable-nls --without-bash-malloc bash_cv_dev_fd=whacky bash_cv_getcwd_malloc=yes --enable-largefile --enable-alias --enable-history --enable-readline --enable-multibyte --enable-job-control --enable-array-variables --host=$target_host --target=$target_host CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" || { echored "Configure failed!"; exit 1; }
         ;;
       "bc")
+        if [ ! -f "$PWD/bc_libmath.h" ]; then cp $SCRIPT_DIR/bc_libmath.h $PWD/bc_libmath.h; fi
         ./configure $FLAGS--prefix=$PREFIX --host=$target_host --target=$target_host CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" || { echored "Configure failed!"; exit 1; }
-        sed -i -e '\|./fbc -c|d' -e 's|$(srcdir)/fix-libmath_h|cp -f ../../bc_libmath.h $(srcdir)/libmath.h|' bc/Makefile
+        sed -i -e '\|./fbc -c|d' -e 's|$(srcdir)/fix-libmath_h|cp -f ../bc_libmath.h $(srcdir)/libmath.h|' bc/Makefile
         ;;
       "coreutils")
-        patch_file $DIR/coreutils.patch
+        patch_file $SCRIPT_DIR/coreutils.patch
         if ! $SEP; then
           FLAGS="$FLAGS--enable-single-binary=symlinks "
           $NDK || FLAGS="$FLAGS--enable-single-binary-exceptions=sort,timeout " #5
@@ -367,10 +369,12 @@ for LBIN in $BIN; do
     else
       make install
     fi
+    for i in $PREFIX/bin/*; do
+      [ -L $i ] || $STRIP $i
+    done
     if [ "$LBIN" == "nano" ]; then
-      $STRIP $PREFIX/bin/nano
       mv -f $PREFIX/bin/nano $PREFIX/bin/nano.bin
-      cp -f $DIR/nano_wrapper $PREFIX/bin/nano
+      cp -f $SCRIPT_DIR/nano_wrapper $PREFIX/bin/nano
     fi
     echogreen "$LBIN built sucessfully and can be found at: $PREFIX"
     cd $DIR
